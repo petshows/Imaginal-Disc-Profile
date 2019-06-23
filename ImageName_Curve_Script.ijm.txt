@@ -1,0 +1,189 @@
+/////Updated Sep 2017 
+//GLOBAL VARS
+ndivis = 100;  //number of segments to divide each curve into.  
+
+//Set up Measurements
+run("Clear Results");
+run("Set Measurements...", " area mean integrated limit redirect=None decimal=3");
+
+results_mean=newArray(ndivis); // will hold means for all roi's
+results_int=newArray(ndivis);  // will hold integrated density for all roi's
+results_area=newArray(ndivis); // will hold areas for all roi's
+
+name = getTitle;
+dotIndex = indexOf(name, ".");
+title = substring(name, 0, dotIndex);
+dirpath=getDirectory("image");
+
+//open X/Y coordinate files and store string
+f2 = File.openAsString(dirpath+title+"_Inner.txt"); //inner loop
+f3 = File.openAsString(dirpath+title+"_Outer.txt");  //outer loop
+
+//parse string into coordinates
+coords2XY = split(f2);
+coords3XY = split(f3);
+
+//print length of coordinate arrays
+//print(coordsUnsplit2.length);
+//print(coordsUnsplit3.length);
+
+//incrementing pointer variable through array for set number of increments.
+
+//SPLIT COORDS ARRAYS INTO X,Y FIRST
+coords2x=newArray(coords2XY.length/2);
+coords2y=newArray(coords2XY.length/2);
+
+for (i=0; i<coords2XY.length; i=i+2)
+{
+	coords2x[i/2]=coords2XY[i];
+	coords2y[i/2]=coords2XY[i+1];
+
+}
+
+coords3x=newArray(coords3XY.length/2);
+coords3y=newArray(coords3XY.length/2);
+
+for (i=0; i<coords3XY.length; i=i+2)
+{
+	coords3x[i/2]=coords3XY[i];
+	coords3y[i/2]=coords3XY[i+1];
+}
+
+////CALCULATE LENGTHS OF EACH CURVE
+var lentemp = 0;
+var dx = 0;
+var dy = 0;
+var length2 = 0;
+var length3 = 0;
+
+for (i=1; i<coords2x.length; i=i+1)
+{
+	dx=((coords2x[i])-(coords2x[i-1]));
+	dy=((coords2y[i])-(coords2y[i-1]));
+
+	lentemp = sqrt( pow(dx,2) + pow(dy,2) ); 
+	length2 = length2 + lentemp;
+
+}
+
+for (i=1; i<coords3x.length; i=i+1)
+{
+	//FOR ONE CURVE
+	x=((coords3x[i])-(coords3x[i-1]));
+	dy=((coords3y[i])-(coords3y[i-1]));
+
+
+	lentemp = sqrt( pow(dx,2) + pow(dy,2) ); 
+	length3 = length3 + lentemp;
+
+}
+
+run("Clear Results");
+print("curve #1 length: "+length2+"\t"+"\t");
+print("curve #2 length: "+length3+"\t"+"\t");
+
+ 	//Open file
+        f = File.open(dirpath+title+"_CurveLengths.txt");
+
+        //Select log window
+        selectWindow("Log");
+
+        //Get content from Log Window + Print to file
+        content = getInfo();
+  	print(f,content);
+
+        //Close file
+  	File.close(f);
+
+run("Clear Results");
+
+
+f2incr = coords2x.length / ndivis;
+f3incr = coords3x.length / ndivis;
+
+f2array=newArray(ndivis+1);
+f3array=newArray(ndivis+1);
+
+//print(f2incr);
+//print(f3incr);
+
+for (i=0; i<=ndivis; i++)
+{
+	indx=i*f2incr;
+	if (i > 0) { indx=indx-1; }
+	//print(round(indx));
+	f2array[i]=round(indx);
+}
+for (i=0; i<=ndivis; i++)
+{
+	indx=i*f3incr;
+	if (i > 0) { indx=indx-1; }
+	//print(round(indx));
+	f3array[i]=round(indx);
+}	
+
+	roiManager("Reset");
+//	setOption("Show All",true);
+
+
+////MAKE SELECTIONS
+for (i=0; i<ndivis; i=i+1)   
+{
+	
+	//MAKE Selection Polygon
+	makePolygon(coords2x[f2array[i]],coords2y[f2array[i]],coords2x[f2array[i+1]],coords2y[f2array[i+1]],coords3x[f3array[i+1]],coords3y[f3array[i+1]],coords3x[f3array[i]],coords3y[f3array[i]]);
+
+	
+
+	selnm="roiMW_"+(1+(i/1));
+	setSelectionName(selnm);
+	
+	//DETERMINE COLOR
+	col=i%3;
+	if (col==0) 
+		run("Properties... ", "name="+selnm+" stroke=blue width=4 fill=none");
+	else if (col==1)
+		run("Properties... ", "name="+selnm+" stroke=red width=4 fill=none");
+	else
+	 	run("Properties... ", "name="+selnm+" stroke=white width=4 fill=none"); 
+	
+	//integ density and mean
+	run("Clear Results");
+	run("Set Measurements...", " area mean integrated limit redirect=None decimal=3");  // change to measuring unthresh area
+	run("Measure");	
+	results_mean[i]=getResult("Mean"); // store mean for ith roi
+	results_int[i]=getResult("IntDen");  // store integrated density for roi
+	results_area[i]=getResult("Area"); //store area for roi
+
+	roiManager("Add");
+
+}
+	
+setOption("Show All",true);
+
+////CREATE PLOTS
+icount=newArray(ndivis);
+for (i=0; i<ndivis; i=i+1) {icount[i]=i+1;}
+
+
+newdir=title+"_Results\\";
+
+
+File.makeDirectory(dirpath+newdir);
+Plot.create("MeanIntensity", "ROI", "MeanGrayValue", icount, results_mean);
+Plot.show();
+saveAs("jpeg", dirpath+newdir+title+"_AverageIntensity_Data_Plot.txt");
+
+
+//create output string
+oputstr="Region\tMeanGray\n”;
+print("");
+print("\\Clear");
+for (i=0; i<ndivis; i=i+1) {
+temp1=""+results_mean[i];
+oputstr=oputstr+i+"\t"+temp1+"\n";
+}
+print(oputstr);
+
+selectWindow("Log");
+saveAs("text",dirpath+newdir+title+"_Results.txt");
